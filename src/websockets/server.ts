@@ -17,16 +17,8 @@ function registerMove(room: string, san: string){
         if(chessis === undefined){
             throw new Error('chess is undefined');
         }
-        // const moves = chessis.moves()
-        // const move = moves[Math.floor(Math.random() * moves.length)]
-        // const x = chessis.move(move)
-        // console.log(chessis.fen() + '\n');
-        // console.log(x);
-        console.log(typeof san)
         const xy = chessis.move(san);
-        console.log(chessis.moves());
         console.log(san);
-        console.log(chessis.fen());
     } catch(err){
         console.log(err);
         throw new Error('Chess thrown an error');
@@ -40,10 +32,22 @@ function moveListener(room: string, socket: number, san: string){
     registerMove(room, san)
     const socketArry = socketMap.get(room);
     if(socketArry === undefined) throw new Error('room does not contain any socket array')
-    console.log(socketArry.length)
-    const socketA = socketArry[socket]
-    console.log(socketA.id);
-    socketA.to(room).emit("move", san);
+    const socketA = socketArry[socket];
+    let ack: NodeJS.Timeout;
+    socketA.timeout(10000).to(room).emit("move", san, (err: Error, response: string) => {
+        if(err){
+            console.log("no acknowledgement")
+            ack = setInterval(() => {
+                if(socketA.connected) socketA.to(room).emit('move', san)
+                else clearInterval(ack);
+            }, 10000) ;
+            // console.log(err);
+        }
+        else{
+            clearInterval(ack);
+            console.log(response)
+        }
+    });
 }
 
 function makeRooms(){
@@ -55,14 +59,12 @@ function makeRooms(){
             sockets.push(x);
             if(sockets.length === 2){
                 const room : string = uid(16);// + "_" + sockets[0].handshake.auth.username + "_" + sockets[1].handshake.auth.username;
-                console.log(room);
+                console.log(`room id = ${room}`);
                 sockets[0].join(room);
                 sockets[1].join(room);
                 sockets[0].on('move', (san: string) => moveListener(room, 0, san));
                 sockets[1].on('move', (san: string) => moveListener(room, 1, san));
-                const x = new Chess();
-                x.load("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-                chessMap.set(room, x);
+                chessMap.set(room, new Chess());
                 socketMap.set(room, [sockets[0], sockets[1]]);
                 sockets.length = 0;
             }
@@ -85,11 +87,19 @@ function makeRooms(){
 
 io.on('connection', (socket) => {
   console.log('a user connected');
+  socket.on('disconnect', (reason) => {
+    console.log(`a user is disconnected, reason : ${reason}`);
+    console.log(socket.handshake.auth.username);
+  })
+  if(socket.recovered){
+    console.log("state reconvered")
+    // trigger event to each memeber of room of the latest state.
+  }
   queue.enqueue(socket);
-  console.log(queue.length);
+
+//   socket.recovered()
+//   socket.disconnect(true)
   if(queue.length >= 2) {
-    console.log("am I coming here")
-    console.log(socket.id);
     makeRooms();
   }
 
