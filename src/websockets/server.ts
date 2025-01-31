@@ -3,7 +3,7 @@ import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 import { Queue } from "../queue";
 import { uid } from "uid";
-import { Chess, Color } from "chess.js";
+import { Chess, Color, DEFAULT_POSITION } from "chess.js";
 
 const app = express();
 const server = createServer(app);
@@ -15,12 +15,61 @@ const io = new Server(server, {
 
 const queue = new Queue<Socket>();
 
+function initiateRematch(room: string){
+  const chessis = roomToChess.get(room)
+  if(chessis){
+    chessis.load(DEFAULT_POSITION);
+  }
+}
+
+function handleRematch(user: string){
+  const room = userToRoomMap.get(user);
+  if(room){
+    let rematchNumber = roomToRematchMap.get(room);
+    if(rematchNumber){
+      if(rematchNumber === 1){
+        roomToRematchMap.delete(room);
+        console.log("initiating rematch")
+        initiateRematch(room);
+        io.to(room).emit('rematchConfirmed');
+      }
+      else{
+        console.log("rematch number is other than 1, and I don't know why It came here");
+      }
+    }else{
+      roomToRematchMap.set(room, 1);
+    }
+  }
+}
+
+function handleNewGame(user: string, socket: Socket){
+  const room = userToRoomMap.get(user);
+  if(room){
+    roomToChess.delete(room);
+    roomToRematchMap.delete(room);
+    const players = getUsersFromRoom(room);
+    for(let i=0; i<players.length; i++){
+      userToRoomMap.delete(players[i]);
+      const sock = userToSocket.get(players[i]);
+      sock?.leave(room);
+      sock?.removeAllListeners('move');
+      if(players[i] === user && sock) queue.enqueue(sock);
+    }
+    if(queue.length >= 2) makeRooms();
+  }else{
+    // I am assuming that code flow will reach here when other player already 
+    // clicked new game, thus userToRoom  entry doesn't exist;
+    queue.enqueue(socket);
+    if(queue.length >= 2) makeRooms();
+  }
+}
+
 function handleUserBanning(notoriousUser: string, room: string) {
   roomToChess.delete(room);
   userToRoomMap.delete(notoriousUser);
   userToTimeoutMap.delete(notoriousUser);
   const notoriousSocket = userToSocket.get(notoriousUser);
-  if (notoriousSocket !== undefined) {
+  if (notoriousSocket) {
     notoriousSocket.emit(
       "banned",
       "you are banned for an hour for the attempt of tampering with servers"
@@ -36,7 +85,7 @@ function handleUserNewGame(evenUser: string, room: string) {
   userToRoomMap.delete(evenUser);
   roomToChess.delete(room);
   const evenSocket = userToSocket.get(evenUser);
-  if (evenSocket !== undefined) {
+  if (evenSocket) {
     console.log("removing listener")
     evenSocket.removeAllListeners('move')
     evenSocket.leave(room);
@@ -109,7 +158,6 @@ function getUsersFromRoom(room: string) {
 function clearnUserRoom(room: string, user: string) {
   roomToChess.delete(room);
   userToTimeoutMap.delete(user);
-  roomToSocketMap.delete(room);
   userToSocket.delete(user);
   const RoomUsers = getUsersFromRoom(room);
   for (let i = 0; i < RoomUsers.length; i++) {
@@ -137,7 +185,11 @@ function registerMove(room: string, san: string, color: Color) {
       throw new Error();
     }
     const xy = chessis.move(san);
-    console.log(chessis.ascii());
+    if(chessis.isGameOver()){
+      const players = getUsersFromRoom(room);
+      // save the game to the database
+    }
+    console.log(chessis.pgn());
     console.log(san);
     return true;
   } catch (err) {
@@ -150,10 +202,10 @@ function registerMove(room: string, san: string, color: Color) {
 
 const bannedUsers = new Map<string, Date>();
 const roomToChess = new Map<string, Chess>();
-const roomToSocketMap = new Map<string, Socket[]>();
 const userToRoomMap = new Map<string, string>();
 const userToSocket = new Map<string, Socket>();
 const userToTimeoutMap = new Map<string, number>();
+const roomToRematchMap = new Map<string, number>();
 
 function moveListener(room: string, color: Color, san: string, socket: Socket) {
   function ackknowledgementCallback(err: Error, response: string) {
@@ -213,7 +265,6 @@ function makeRooms() {
         userToRoomMap.set(sockets[0].handshake.auth.username, room);
         userToRoomMap.set(sockets[1].handshake.auth.username, room);
         roomToChess.set(room, new Chess());
-        roomToSocketMap.set(room, [sockets[0], sockets[1]]);
         sockets.length = 0;
       }
     } else {
@@ -240,7 +291,7 @@ io.on("connection", (socket) => {
   if (bannedUsers.has(socket.handshake.auth.username)) {
     let currTime = new Date().getTime();
     let prevTime = bannedUsers.get(socket.handshake.auth.username)?.getTime();
-    if (prevTime !== undefined) {
+    if (prevTime) {
       const x = (currTime - prevTime) / 1000;
       if (x < 60) {
         socket.emit(
@@ -278,19 +329,26 @@ io.on("connection", (socket) => {
     });
     console.log(roomSet);
     console.log(`length of socket rooms object : ${socket.rooms.size}`);
-    const timed = setTimeout(
-      (room: string, author: string) => {
-        if (room !== "") clearnUserRoom(room, author);
-        console.log(room);
-        console.log(`author = ${author}`);
-      },
-      3000,
-      roomSet,
-      socket.handshake.auth.username
-    );
-    userToTimeoutMap.set(socket.handshake.auth.username, timed);
-    console.log(timed);
+    if (roomSet !== "") {
+      const timed = setTimeout(
+        (room: string, author: string) => {
+          clearnUserRoom(room, author);
+          console.log(room);
+          console.log(`author = ${author}`);
+        },
+        3000,
+        roomSet,
+        socket.handshake.auth.username
+      );
+      userToTimeoutMap.set(socket.handshake.auth.username, timed);
+    }
+    else{
+      userToSocket.delete(socket.handshake.auth.username)
+    }
   });
+
+  socket.on('rematch', () => handleRematch(socket.handshake.auth.username) );
+  socket.on('newgame', () => handleNewGame(socket.handshake.auth.username, socket));
 
   if (userToTimeoutMap.has(socket.handshake.auth.username)) {
     const userName = socket.handshake.auth.username;
