@@ -15,8 +15,36 @@ const io = new Server(server, {
 
 const queue = new Queue<Socket>();
 
-function banTheUser(room: String, color: Color){
+function handleUserBanning(notoriousUser: string, room: string){
+    roomToChess.delete(room);
+    userToRoomMap.delete(notoriousUser);
+    userToTimeoutMap.delete(notoriousUser);
+    const notoriousSocket = userToSocket.get(notoriousUser);
+    if(notoriousSocket !== undefined){
+        notoriousSocket.emit('banned', "you are banned for an hour for the attempt of tampering with servers");
+    }
+    userToSocket.delete(notoriousUser);
+}
 
+function handleUserNewGame(evenUser: string, room: string){
+  userToRoomMap.delete(evenUser);
+  roomToChess.delete(room);
+  const evenSocket = userToSocket.get(evenUser);
+  if(evenSocket !== undefined){
+    evenSocket.emit('newgame', "opponent left unexpectedly, transferring to a new game");
+    queue.enqueue(evenSocket);
+    if(queue.length >= 2) makeRooms();
+  }
+}
+
+function banTheUser(room: string, color: Color){
+    const users = getUsersFromRoom(room);
+    const notoriousUser = users[color === 'w' ? 0 : 1];
+    const evenUser = users[color === 'w' ? 1 : 0]
+    const currTime = new Date();
+    bannedUsers.set(notoriousUser, currTime);
+    handleUserBanning(notoriousUser, room);
+    handleUserNewGame(evenUser, room);
 }
 
 function beginReconciliation(socket: Socket){
@@ -103,6 +131,7 @@ function registerMove(room: string, san: string, color: Color) {
   }
 }
 
+const bannedUsers = new Map<string, Date>();
 const roomToChess = new Map<string, Chess>();
 const roomToSocketMap = new Map<string, Socket[]>();
 const userToRoomMap = new Map<string, string>();
@@ -195,6 +224,22 @@ function makeRooms() {
 io.on("connection", (socket) => {
   console.log(`${socket.handshake.auth.username} has jointed`);
   console.log(`socket id : ${socket.id}`);
+
+  if(bannedUsers.has(socket.handshake.auth.username)){
+    let currTime = new Date().getTime();
+    let prevTime = bannedUsers.get(socket.handshake.auth.username)?.getTime();
+    if(prevTime !== undefined){
+        const x = (currTime - prevTime)/1000;
+        if(x < 60){
+          socket.emit('banned', `you are banned for ${Math.ceil(x/60)} minutes for the attempt of tampering with servers`);
+          console.log(`${socket.handshake.auth.username} has been banned for ${Math.ceil(x/60)} minutes`)
+          return;
+        }
+        else{
+          bannedUsers.delete(socket.handshake.auth.username);
+        }
+    }
+  }
 
   socket.on("disconnect", (reason) => {
     console.log(
