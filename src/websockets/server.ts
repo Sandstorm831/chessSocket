@@ -15,66 +15,81 @@ const io = new Server(server, {
 
 const queue = new Queue<Socket>();
 
-function handleUserBanning(notoriousUser: string, room: string){
-    roomToChess.delete(room);
-    userToRoomMap.delete(notoriousUser);
-    userToTimeoutMap.delete(notoriousUser);
-    const notoriousSocket = userToSocket.get(notoriousUser);
-    if(notoriousSocket !== undefined){
-        notoriousSocket.emit('banned', "you are banned for an hour for the attempt of tampering with servers");
-    }
-    userToSocket.delete(notoriousUser);
+function handleUserBanning(notoriousUser: string, room: string) {
+  roomToChess.delete(room);
+  userToRoomMap.delete(notoriousUser);
+  userToTimeoutMap.delete(notoriousUser);
+  const notoriousSocket = userToSocket.get(notoriousUser);
+  if (notoriousSocket !== undefined) {
+    notoriousSocket.emit(
+      "banned",
+      "you are banned for an hour for the attempt of tampering with servers"
+    );
+    notoriousSocket.removeAllListeners();
+    notoriousSocket.disconnect();
+    console.log(`${notoriousUser} is banned for some time`);
+  }
+  userToSocket.delete(notoriousUser);
 }
 
-function handleUserNewGame(evenUser: string, room: string){
+function handleUserNewGame(evenUser: string, room: string) {
   userToRoomMap.delete(evenUser);
   roomToChess.delete(room);
   const evenSocket = userToSocket.get(evenUser);
-  if(evenSocket !== undefined){
-    evenSocket.emit('newgame', "opponent left unexpectedly, transferring to a new game");
+  if (evenSocket !== undefined) {
+    console.log("removing listener")
+    evenSocket.removeAllListeners('move')
+    evenSocket.leave(room);
+    evenSocket.emit(
+      "newgame",
+      "opponent left unexpectedly, transferring to a new game"
+    );
     queue.enqueue(evenSocket);
-    if(queue.length >= 2) makeRooms();
+    if (queue.length >= 2) makeRooms();
   }
+} 
+
+function banTheUser(room: string, color: Color) {
+  const users = getUsersFromRoom(room);
+  const notoriousUser = users[color === "w" ? 0 : 1];
+  const evenUser = users[color === "w" ? 1 : 0];
+  const currTime = new Date();
+  bannedUsers.set(notoriousUser, currTime);
+  console.log("banned array is set");
+  handleUserBanning(notoriousUser, room);
+  handleUserNewGame(evenUser, room);
 }
 
-function banTheUser(room: string, color: Color){
-    const users = getUsersFromRoom(room);
-    const notoriousUser = users[color === 'w' ? 0 : 1];
-    const evenUser = users[color === 'w' ? 1 : 0]
-    const currTime = new Date();
-    bannedUsers.set(notoriousUser, currTime);
-    handleUserBanning(notoriousUser, room);
-    handleUserNewGame(evenUser, room);
-}
+function beginReconciliation(socket: Socket) {
+  const room = getRoomFromSocket(socket);
+  const chessis = roomToChess.get(room);
+  if (chessis === undefined) {
+    // do something when chess object is not defined
+    throw new Error("chess is not defined");
+  }
+  const x = chessis.history();
 
-function beginReconciliation(socket: Socket){
-    const room = getRoomFromSocket(socket);
-    const chessis = roomToChess.get(room);
-    if(chessis === undefined){
-        // do something when chess object is not defined
-        throw new Error('chess is not defined');
+  function acknowledgementCallback(err: Error, response: string) {
+    if (err) {
+      console.log("no acknowledgement");
+      socket
+        .timeout(10000)
+        .to(room)
+        .emit("reconciliation", x, (err: Error, response: string) =>
+          acknowledgementCallback(err, response)
+        );
+      return;
+    } else {
+      console.log(response);
+      return;
     }
-    const x = chessis.history();
+    return;
+  }
 
-    function acknowledgementCallback(err: Error, response: string){
-        if (err) {
-            console.log("no acknowledgement");
-            socket
-              .timeout(10000)
-              .to(room)
-              .emit("reconciliation", x, (err: Error, response: string) =>
-                acknowledgementCallback(err, response)
-              );
-            return;
-          } else {
-            console.log(response);
-            return;
-          }
-          return;
-    }
-
-    socket.timeout(20000).emit('reconciliation', x, (err: Error, response: string) => {
-        acknowledgementCallback(err, response);
+  socket
+    .timeout(20000)
+    .emit("reconciliation", x, (err: Error, response: string) => {
+      acknowledgementCallback(err, response);
     });
 }
 
@@ -115,19 +130,21 @@ function registerMove(room: string, san: string, color: Color) {
   try {
     const chessis = roomToChess.get(room);
     if (chessis === undefined) {
-        console.log("chess is not defined at the server");
-        return;
+      console.log("chess is not defined at the server");
+      return;
     }
-    if(color !== chessis.turn()){
-        throw new Error()
+    if (color !== chessis.turn()) {
+      throw new Error();
     }
     const xy = chessis.move(san);
     console.log(chessis.ascii());
     console.log(san);
+    return true;
   } catch (err) {
     console.log(err);
     banTheUser(room, color);
-    throw new Error("Chess thrown an error");
+    return false;
+    // throw new Error("Chess thrown an error");
   }
 }
 
@@ -138,12 +155,7 @@ const userToRoomMap = new Map<string, string>();
 const userToSocket = new Map<string, Socket>();
 const userToTimeoutMap = new Map<string, number>();
 
-function moveListener(
-  room: string,
-  color: Color,
-  san: string,
-  socket: Socket
-) {
+function moveListener(room: string, color: Color, san: string, socket: Socket) {
   function ackknowledgementCallback(err: Error, response: string) {
     if (err) {
       console.log("no acknowledgement");
@@ -162,7 +174,7 @@ function moveListener(
   }
   // console.log(socket);
   console.log(socket.rooms);
-  registerMove(room, san, color);
+  if(! registerMove(room, san, color)) return;
   socket
     .timeout(10000)
     .to(room)
@@ -192,11 +204,11 @@ function makeRooms() {
         const socket1 = sockets[1];
         // user1 is assigned color white
         sockets[0].on("move", (san: string) =>
-          moveListener(room, 'w', san, socket0)
+          moveListener(room, "w", san, socket0)
         );
         // user 2 is assigned color black
         sockets[1].on("move", (san: string) =>
-          moveListener(room, 'b', san, socket1)
+          moveListener(room, "b", san, socket1)
         );
         userToRoomMap.set(sockets[0].handshake.auth.username, room);
         userToRoomMap.set(sockets[1].handshake.auth.username, room);
@@ -225,19 +237,27 @@ io.on("connection", (socket) => {
   console.log(`${socket.handshake.auth.username} has jointed`);
   console.log(`socket id : ${socket.id}`);
 
-  if(bannedUsers.has(socket.handshake.auth.username)){
+  if (bannedUsers.has(socket.handshake.auth.username)) {
     let currTime = new Date().getTime();
     let prevTime = bannedUsers.get(socket.handshake.auth.username)?.getTime();
-    if(prevTime !== undefined){
-        const x = (currTime - prevTime)/1000;
-        if(x < 60){
-          socket.emit('banned', `you are banned for ${Math.ceil(x/60)} minutes for the attempt of tampering with servers`);
-          console.log(`${socket.handshake.auth.username} has been banned for ${Math.ceil(x/60)} minutes`)
-          return;
-        }
-        else{
-          bannedUsers.delete(socket.handshake.auth.username);
-        }
+    if (prevTime !== undefined) {
+      const x = (currTime - prevTime) / 1000;
+      if (x < 60) {
+        socket.emit(
+          "banned",
+          `you are banned for ${Math.ceil(
+            x / 60
+          )} minutes for the attempt of tampering with servers`
+        );
+        console.log(
+          `${socket.handshake.auth.username} has been banned for ${Math.ceil(
+            x / 60
+          )} minutes`
+        );
+        return;
+      } else {
+        bannedUsers.delete(socket.handshake.auth.username);
+      }
     }
   }
 
@@ -282,13 +302,20 @@ io.on("connection", (socket) => {
     } else {
       socket.join(room);
       const users = getUsersFromRoom(room);
-      if(users[0] === userName) socket.on("move", (san: string) => moveListener(room, 'w', san, socket));
-      else socket.on("move", (san: string) => moveListener(room, 'b', san, socket));
+      if (users[0] === userName)
+        socket.on("move", (san: string) =>
+          moveListener(room, "w", san, socket)
+        );
+      else
+        socket.on("move", (san: string) =>
+          moveListener(room, "b", san, socket)
+        );
       userToTimeoutMap.delete(userName);
       userToSocket.set(userName, socket);
       console.log("finally joined the old room");
       console.log(room);
       beginReconciliation(socket);
+      return;
     }
   }
   userToSocket.set(socket.handshake.auth.username, socket);
