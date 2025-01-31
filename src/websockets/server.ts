@@ -15,52 +15,92 @@ const io = new Server(server, {
 
 const queue = new Queue<Socket>();
 
-function initiateRematch(room: string){
-  const chessis = roomToChess.get(room)
-  if(chessis){
+function initiateRematch(room: string) {
+  const chessis = roomToChess.get(room);
+  if (chessis) {
     chessis.load(DEFAULT_POSITION);
   }
 }
 
-function handleRematch(user: string){
+function handleRematch(user: string) {
   const room = userToRoomMap.get(user);
-  if(room){
+  if (room) {
     let rematchNumber = roomToRematchMap.get(room);
-    if(rematchNumber){
-      if(rematchNumber === 1){
+    if (rematchNumber) {
+      if (rematchNumber === 1) {
         roomToRematchMap.delete(room);
-        console.log("initiating rematch")
+        console.log("initiating rematch");
         initiateRematch(room);
-        io.to(room).emit('rematchConfirmed');
+        io.to(room).emit("rematchConfirmed");
+      } else {
+        console.log(
+          "rematch number is other than 1, and I don't know why It came here"
+        );
       }
-      else{
-        console.log("rematch number is other than 1, and I don't know why It came here");
-      }
-    }else{
+    } else {
       roomToRematchMap.set(room, 1);
     }
   }
 }
 
-function handleNewGame(user: string, socket: Socket){
+function handleGameLeave(user: string) {
   const room = userToRoomMap.get(user);
-  if(room){
+  const tempSocket = userToSocket.get(user);
+  if (tempSocket && room) {
+    tempSocket.to(room).emit("otherPlayerLeft");
+  }
+  if (room) {
     roomToChess.delete(room);
     roomToRematchMap.delete(room);
     const players = getUsersFromRoom(room);
-    for(let i=0; i<players.length; i++){
+    for (let i = 0; i < players.length; i++) {
+      userToRoomMap.delete(players[i]);
+      const socket = userToSocket.get(players[i]);
+      socket?.leave(room);
+      socket?.removeAllListeners("move");
+      if (players[i] === user && socket) {
+        socket.disconnect();
+      }
+    }
+    userToSocket.delete(user);
+  } else {
+    // I am assuming that code flow will reach here when other player already
+    // clicked new game, thus userToRoom entry doesn't exist;
+    const socket = userToSocket.get(user);
+    if (socket) {
+      socket.disconnect();
+    }
+    userToSocket.delete(user);
+  }
+}
+
+function handleNewGame(user: string) {
+  const room = userToRoomMap.get(user);
+  const tempSocket = userToSocket.get(user);
+  if (tempSocket && room) {
+    tempSocket.to(room).emit("otherPlayerLeft");
+  }
+  if (room) {
+    roomToChess.delete(room);
+    roomToRematchMap.delete(room);
+    const players = getUsersFromRoom(room);
+    for (let i = 0; i < players.length; i++) {
       userToRoomMap.delete(players[i]);
       const sock = userToSocket.get(players[i]);
       sock?.leave(room);
-      sock?.removeAllListeners('move');
-      if(players[i] === user && sock) queue.enqueue(sock);
+      sock?.removeAllListeners("move");
+      if (players[i] === user && sock) queue.enqueue(sock);
     }
-    if(queue.length >= 2) makeRooms();
-  }else{
-    // I am assuming that code flow will reach here when other player already 
+    if (queue.length >= 2) makeRooms();
+  } else {
+    // I am assuming that code flow will reach here when other player already
     // clicked new game, thus userToRoom  entry doesn't exist;
-    queue.enqueue(socket);
-    if(queue.length >= 2) makeRooms();
+    const socket = userToSocket.get(user);
+    if (socket) {
+      socket.removeAllListeners("move");
+      queue.enqueue(socket);
+    }
+    if (queue.length >= 2) makeRooms();
   }
 }
 
@@ -86,8 +126,8 @@ function handleUserNewGame(evenUser: string, room: string) {
   roomToChess.delete(room);
   const evenSocket = userToSocket.get(evenUser);
   if (evenSocket) {
-    console.log("removing listener")
-    evenSocket.removeAllListeners('move')
+    console.log("removing listener");
+    evenSocket.removeAllListeners("move");
     evenSocket.leave(room);
     evenSocket.emit(
       "newgame",
@@ -96,7 +136,7 @@ function handleUserNewGame(evenUser: string, room: string) {
     queue.enqueue(evenSocket);
     if (queue.length >= 2) makeRooms();
   }
-} 
+}
 
 function banTheUser(room: string, color: Color) {
   const users = getUsersFromRoom(room);
@@ -185,7 +225,7 @@ function registerMove(room: string, san: string, color: Color) {
       throw new Error();
     }
     const xy = chessis.move(san);
-    if(chessis.isGameOver()){
+    if (chessis.isGameOver()) {
       const players = getUsersFromRoom(room);
       // save the game to the database
     }
@@ -226,7 +266,7 @@ function moveListener(room: string, color: Color, san: string, socket: Socket) {
   }
   // console.log(socket);
   console.log(socket.rooms);
-  if(! registerMove(room, san, color)) return;
+  if (!registerMove(room, san, color)) return;
   socket
     .timeout(10000)
     .to(room)
@@ -316,6 +356,7 @@ io.on("connection", (socket) => {
     console.log(
       `${socket.handshake.auth.username} is disconnected, reason : ${reason}`
     );
+    userToSocket.delete(socket.handshake.auth.username);
   });
 
   socket.on("disconnecting", (reason) => {
@@ -341,14 +382,14 @@ io.on("connection", (socket) => {
         socket.handshake.auth.username
       );
       userToTimeoutMap.set(socket.handshake.auth.username, timed);
-    }
-    else{
-      userToSocket.delete(socket.handshake.auth.username)
+    } else {
+      userToSocket.delete(socket.handshake.auth.username);
     }
   });
 
-  socket.on('rematch', () => handleRematch(socket.handshake.auth.username) );
-  socket.on('newgame', () => handleNewGame(socket.handshake.auth.username, socket));
+  socket.on("rematch", () => handleRematch(socket.handshake.auth.username));
+  socket.on("newgame", () => handleNewGame(socket.handshake.auth.username));
+  socket.on("gameleave", () => handleGameLeave(socket.handshake.auth.username));
 
   if (userToTimeoutMap.has(socket.handshake.auth.username)) {
     const userName = socket.handshake.auth.username;
