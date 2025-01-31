@@ -15,6 +15,10 @@ const io = new Server(server, {
 
 const queue = new Queue<Socket>();
 
+function banTheUser(room: String, color: Color){
+
+}
+
 function beginReconciliation(socket: Socket){
     const room = getRoomFromSocket(socket);
     const chessis = roomToChess.get(room);
@@ -79,17 +83,22 @@ function clearnUserRoom(room: string, user: string) {
   }
 }
 
-function registerMove(room: string, san: string) {
+function registerMove(room: string, san: string, color: Color) {
   try {
     const chessis = roomToChess.get(room);
     if (chessis === undefined) {
-      throw new Error("chess is undefined");
+        console.log("chess is not defined at the server");
+        return;
+    }
+    if(color !== chessis.turn()){
+        throw new Error()
     }
     const xy = chessis.move(san);
     console.log(chessis.ascii());
     console.log(san);
   } catch (err) {
     console.log(err);
+    banTheUser(room, color);
     throw new Error("Chess thrown an error");
   }
 }
@@ -124,7 +133,7 @@ function moveListener(
   }
   // console.log(socket);
   console.log(socket.rooms);
-  registerMove(room, san);
+  registerMove(room, san, color);
   socket
     .timeout(10000)
     .to(room)
@@ -227,8 +236,9 @@ io.on("connection", (socket) => {
       // room is not there for the corresponding user, thus display that his room/game is dissolved thus trying to get a new game for him
     } else {
       socket.join(room);
-
-      socket.on("move", (san: string) => moveListener(room, 0, san, socket));
+      const users = getUsersFromRoom(room);
+      if(users[0] === userName) socket.on("move", (san: string) => moveListener(room, 'w', san, socket));
+      else socket.on("move", (san: string) => moveListener(room, 'b', san, socket));
       userToTimeoutMap.delete(userName);
       userToSocket.set(userName, socket);
       console.log("finally joined the old room");
