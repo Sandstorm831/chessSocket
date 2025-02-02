@@ -376,7 +376,10 @@ io.on("connection", (socket) => {
       }
     }
   }
-
+  if(userToSocket.has(socket.handshake.auth.username)){
+    socket.disconnect();
+    return;
+  }
   socket.on("disconnect", (reason) => {
     console.log(
       `${socket.handshake.auth.username} is disconnected, reason : ${reason}`,
