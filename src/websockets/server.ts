@@ -5,6 +5,7 @@ import { Queue } from "../queue";
 import { uid } from "uid";
 import { Chess, Color, DEFAULT_POSITION } from "chess.js";
 
+
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
@@ -25,7 +26,7 @@ function initiateRematch(room: string) {
 function handleGameResignation(socket: Socket, user: string, playColor: Color) {
   const room = userToRoomMap.get(user);
   if (room) {
-    socket.to(room).emit("resigned");
+    socket.to(room).emit("resigned", playColor);
     const resgString: string = playColor === "w" ? "0-1" : "1-0";
     const chessis = roomToChess.get(room);
     let PGN = chessis?.pgn();
@@ -264,7 +265,7 @@ const userToSocket = new Map<string, Socket>();
 const userToTimeoutMap = new Map<string, number>();
 const roomToRematchMap = new Map<string, number>();
 
-function moveListener(room: string, color: Color, san: string, socket: Socket) {
+function moveListener(room: string, color: Color, san: string, socket: Socket, callback: Function) {
   function ackknowledgementCallback(err: Error, response: string) {
     if (err) {
       console.log("no acknowledgement");
@@ -282,6 +283,12 @@ function moveListener(room: string, color: Color, san: string, socket: Socket) {
     return;
   }
   // console.log(socket);
+  console.log(`room : ${room}`); // FC
+  console.log(`color: ${color}`); // FC
+  console.log(`SAN : ${san}`); // FC
+  console.log(`USER : ${socket.handshake.auth.username}`); // FC
+  console.log('-------------------------------------------------')
+  callback('ok');
   if (!registerMove(room, san, color)) return;
   socket
     .timeout(10000)
@@ -310,12 +317,12 @@ function makeRooms() {
         const socket0 = sockets[0];
         const socket1 = sockets[1];
         // user1 is assigned color white
-        sockets[0].on("move", (san: string) =>
-          moveListener(room, "w", san, socket0),
+        sockets[0].on("move", (san: string, callback: Function) =>
+          moveListener(room, "w", san, socket0, callback),
         );
         // user 2 is assigned color black
-        sockets[1].on("move", (san: string) =>
-          moveListener(room, "b", san, socket1),
+        sockets[1].on("move", (san: string, callback: Function) =>
+          moveListener(room, "b", san, socket1, callback),
         );
 
         socket0.emit("gamecolor", "w");
@@ -421,13 +428,13 @@ io.on("connection", (socket) => {
       let color: Color;
       if (users[0] === userName) {
         color = "w";
-        socket.on("move", (san: string) =>
-          moveListener(room, "w", san, socket),
+        socket.on("move", (san: string, callback:Function) =>
+          moveListener(room, "w", san, socket, callback),
         );
       } else {
         color = "b";
-        socket.on("move", (san: string) =>
-          moveListener(room, "b", san, socket),
+        socket.on("move", (san: string, callback: Function) =>
+          moveListener(room, "b", san, socket, callback),
         );
       }
       userToTimeoutMap.delete(userName);
