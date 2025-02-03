@@ -215,16 +215,12 @@ function getUsersFromRoom(room: string) {
 }
 
 function cleanUsersAndRoom(user: string) {
-
   ///////////////
   if(user){
     const room = userToRoomMap.get(user);
-    const socketer = userToSocket.get(user);
-    if (socketer && room){
-      socketer.to(room).emit('opponentleftgame');
-    }
     userToTimeoutMap.delete(user);
     if (room) {
+      io.in(room).socketsLeave(room);
       roomToChess.delete(room);
       roomToRematchMap.delete(room);
       const players = getUsersFromRoom(room);
@@ -232,20 +228,16 @@ function cleanUsersAndRoom(user: string) {
         userToRoomMap.delete(players[i]);
         userToTimeoutMap.delete(players[i]);
         const socket = userToSocket.get(players[i]);
-        socket?.leave(room);
         socket?.removeAllListeners("move");
-        if (players[i] === user && socket) {
-          socket.disconnect();
+        if (players[i] !== user && socket) {
+          console.log('Testing If control is reaching the emit statement of opponentleftgame & room = ' + room)
+          socket.emit('opponentleftgame');
         }
       }
       userToSocket.delete(user);
     }
     else {
       // just a safety net
-      const socket = userToSocket.get(user);
-      if (socket) {
-        socket.disconnect();
-      }
       userToSocket.delete(user);
     }
   }
