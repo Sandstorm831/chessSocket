@@ -182,13 +182,13 @@ function beginReconciliation(socket: Socket, color: Color) {
       console.log("no acknowledgement");
       socket
         .timeout(10000)
-        .to(room)
         .emit("reconciliation", x, color, (err: Error, response: string) =>
           acknowledgementCallback(err, response),
         );
       return;
     } else {
       console.log(response);
+      socket.to(room).emit('opponentreconnected')
       return;
     }
     return;
@@ -214,25 +214,42 @@ function getUsersFromRoom(room: string) {
   return temp.split("?user2=");
 }
 
-function clearnUserRoom(room: string, user: string) {
-  roomToChess.delete(room);
-  userToTimeoutMap.delete(user);
-  const socket = userToSocket.get(user);
-  if (socket) socket.leave(room);
-  userToSocket.delete(user);
-  const RoomUsers = getUsersFromRoom(room);
-  for (let i = 0; i < RoomUsers.length; i++) {
-    userToRoomMap.delete(RoomUsers[i]);
-    if (RoomUsers[i] !== user) {
-      const x = userToSocket.get(RoomUsers[i]);
-      if (x === undefined) {
-      } else {
-        // See if you want the user to be able see the board without saying him to play new game.
-        queue.enqueue(x);
-        if (queue.length >= 2) makeRooms();
+function cleanUsersAndRoom(user: string) {
+
+  ///////////////
+  if(user){
+    const room = userToRoomMap.get(user);
+    const socketer = userToSocket.get(user);
+    if (socketer && room){
+      socketer.to(room).emit('opponentleftgame');
+    }
+    userToTimeoutMap.delete(user);
+    if (room) {
+      roomToChess.delete(room);
+      roomToRematchMap.delete(room);
+      const players = getUsersFromRoom(room);
+      for (let i = 0; i < players.length; i++) {
+        userToRoomMap.delete(players[i]);
+        userToTimeoutMap.delete(players[i]);
+        const socket = userToSocket.get(players[i]);
+        socket?.leave(room);
+        socket?.removeAllListeners("move");
+        if (players[i] === user && socket) {
+          socket.disconnect();
+        }
       }
+      userToSocket.delete(user);
+    }
+    else {
+      // just a safety net
+      const socket = userToSocket.get(user);
+      if (socket) {
+        socket.disconnect();
+      }
+      userToSocket.delete(user);
     }
   }
+  ///////////////
 }
 
 function registerMove(room: string, san: string, color: Color) {
@@ -258,12 +275,12 @@ function registerMove(room: string, san: string, color: Color) {
   }
 }
 
-const bannedUsers = new Map<string, Date>();
-const roomToChess = new Map<string, Chess>();
-const userToRoomMap = new Map<string, string>();
-const userToSocket = new Map<string, Socket>();
-const userToTimeoutMap = new Map<string, number>();
-const roomToRematchMap = new Map<string, number>();
+const bannedUsers = new Map<string, Date>(); // \/
+const roomToChess = new Map<string, Chess>();// \/
+const userToRoomMap = new Map<string, string>();// \/
+const userToSocket = new Map<string, Socket>();// \/
+const userToTimeoutMap = new Map<string, number>();// \/
+const roomToRematchMap = new Map<string, number>();// \/
 
 function moveListener(room: string, color: Color, san: string, socket: Socket, callback: Function) {
   function ackknowledgementCallback(err: Error, response: string) {
@@ -396,17 +413,20 @@ io.on("connection", (socket) => {
     socket.rooms.forEach((x) => {
       if (x.length !== 20) roomSet = x;
     });
-    if (roomSet !== "") {
+    const chessis = roomToChess.get(roomSet);
+    if (roomSet !== "" && chessis && !chessis.isGameOver()) {
+      socket.to(roomSet).emit("opponentdisconnected");
       const timed = setTimeout(
-        (room: string, author: string) => {
-          clearnUserRoom(room, author);
+        (author: string) => {
+          cleanUsersAndRoom(author);
         },
         3000,
-        roomSet,
         socket.handshake.auth.username,
       );
       userToTimeoutMap.set(socket.handshake.auth.username, timed);
-    } else {
+    } else if(roomSet !== "" && chessis && chessis.isGameOver()){
+      handleGameLeave(socket.handshake.auth.username);
+    }else {
       userToSocket.delete(socket.handshake.auth.username);
     }
   });
