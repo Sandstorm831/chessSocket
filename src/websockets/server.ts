@@ -5,7 +5,6 @@ import { Queue } from "../queue";
 import { uid } from "uid";
 import { Chess, Color, DEFAULT_POSITION } from "chess.js";
 
-
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
@@ -125,46 +124,106 @@ function handleNewGame(user: string) {
   }
 }
 
-function handleUserBanning(notoriousUser: string, room: string) {
-  roomToChess.delete(room);
-  userToRoomMap.delete(notoriousUser);
-  userToTimeoutMap.delete(notoriousUser);
-  const notoriousSocket = userToSocket.get(notoriousUser);
-  if (notoriousSocket) {
-    notoriousSocket.emit(
-      "banned",
-      "you are banned for an hour for the attempt of tampering with servers",
-    );
-    notoriousSocket.removeAllListeners();
-    notoriousSocket.disconnect();
-  }
-  userToSocket.delete(notoriousUser);
-}
+// function handleUserBanning(notoriousUser: string, room: string) {
+//   roomToChess.delete(room);
+//   userToRoomMap.delete(notoriousUser);
+//   userToTimeoutMap.delete(notoriousUser);
+//   const notoriousSocket = userToSocket.get(notoriousUser);
+//   if (notoriousSocket) {
+//     notoriousSocket.emit(
+//       "banned",
+//       "you are banned for an hour for the attempt of tampering with servers",
+//     );
+//     notoriousSocket.removeAllListeners();
+//     notoriousSocket.disconnect();
+//   }
+//   userToSocket.delete(notoriousUser);
+// }
 
-function handleNewGameBanned(evenUser: string, room: string) {
-  userToRoomMap.delete(evenUser);
-  roomToChess.delete(room);
-  const evenSocket = userToSocket.get(evenUser);
-  if (evenSocket) {
-    evenSocket.removeAllListeners("move");
-    evenSocket.leave(room);
-    evenSocket.emit(
-      "otherplayerleft",
-      "opponent left unexpectedly, transferring to a new game",
-    );
-    queue.enqueue(evenSocket);
-    if (queue.length >= 2) makeRooms();
-  }
-}
+// function handleNewGameBanned(user: string, room: string) {
+
+//   ///////////////
+//   if(user){
+//     const room = userToRoomMap.get(user);
+//     userToTimeoutMap.delete(user);
+//     if (room) {
+//       io.in(room).socketsLeave(room);
+//       roomToChess.delete(room);
+//       roomToRematchMap.delete(room);
+//       const players = getUsersFromRoom(room);
+//       for (let i = 0; i < players.length; i++) {
+//         userToRoomMap.delete(players[i]);
+//         userToTimeoutMap.delete(players[i]);
+//         const socket = userToSocket.get(players[i]);
+//         socket?.removeAllListeners("move");
+//         if (players[i] !== user && socket) {
+//           console.log('Testing If control is reaching the emit statement of opponentleftgame & room = ' + room)
+//           socket.emit('opponentleftgame');
+//         }
+//       }
+//       userToSocket.delete(user);
+//     }
+//     else {
+//       // just a safety net
+//       userToSocket.delete(user);
+//     }
+//   }
+//   ///////////////
+
+//   userToRoomMap.delete(user);
+//   roomToChess.delete(room);
+//   const evenSocket = userToSocket.get(user);
+//   if (evenSocket) {
+//     evenSocket.removeAllListeners("move");
+//     evenSocket.leave(room);
+//     evenSocket.emit(
+//       "otherplayerleft",
+//       "opponent left unexpectedly, transferring to a new game",
+//     );
+//     queue.enqueue(evenSocket);
+//     if (queue.length >= 2) makeRooms();
+//   }
+// }
 
 function banTheUser(room: string, color: Color) {
-  const users = getUsersFromRoom(room);
-  const notoriousUser = users[color === "w" ? 0 : 1];
-  const evenUser = users[color === "w" ? 1 : 0];
+  const players = getUsersFromRoom(room);
+  const notoriousUser = players[color === "w" ? 0 : 1];
+  const evenUser = players[color === "w" ? 1 : 0];
   const currTime = new Date();
   bannedUsers.set(notoriousUser, currTime);
-  handleUserBanning(notoriousUser, room);
-  handleNewGameBanned(evenUser, room);
+
+  ///////////////
+
+  if (room) {
+    io.in(room).socketsLeave(room);
+    roomToChess.delete(room);
+    roomToRematchMap.delete(room);
+    for (let i = 0; i < players.length; i++) {
+      userToTimeoutMap.delete(players[i]);
+      userToRoomMap.delete(players[i]);
+      userToTimeoutMap.delete(players[i]);
+      const socket = userToSocket.get(players[i]);
+      socket?.removeAllListeners("move");
+      if (players[i] !== notoriousUser && socket) {
+        console.log(
+          "Testing If control is reaching the emit statement of opponentleftgame & room = " +
+            room,
+        );
+        socket.emit("opponentleftgame");
+      } else if (players[i] === notoriousUser && socket) {
+        socket.emit("banned", 30);
+        socket.removeAllListeners();
+        socket.disconnect();
+      }
+    }
+    userToSocket.delete(notoriousUser);
+  } else {
+    // Don't know what to do if room is not there
+  }
+  ///////////////
+
+  // handleUserBanning(notoriousUser, room);
+  // handleNewGameBanned(evenUser, room);
 }
 
 function beginReconciliation(socket: Socket, color: Color) {
@@ -188,7 +247,7 @@ function beginReconciliation(socket: Socket, color: Color) {
       return;
     } else {
       console.log(response);
-      socket.to(room).emit('opponentreconnected')
+      socket.to(room).emit("opponentreconnected");
       return;
     }
     return;
@@ -216,7 +275,7 @@ function getUsersFromRoom(room: string) {
 
 function cleanUsersAndRoom(user: string) {
   ///////////////
-  if(user){
+  if (user) {
     const room = userToRoomMap.get(user);
     userToTimeoutMap.delete(user);
     if (room) {
@@ -230,13 +289,15 @@ function cleanUsersAndRoom(user: string) {
         const socket = userToSocket.get(players[i]);
         socket?.removeAllListeners("move");
         if (players[i] !== user && socket) {
-          console.log('Testing If control is reaching the emit statement of opponentleftgame & room = ' + room)
-          socket.emit('opponentleftgame');
+          console.log(
+            "Testing If control is reaching the emit statement of opponentleftgame & room = " +
+              room,
+          );
+          socket.emit("opponentleftgame");
         }
       }
       userToSocket.delete(user);
-    }
-    else {
+    } else {
       // just a safety net
       userToSocket.delete(user);
     }
@@ -268,13 +329,19 @@ function registerMove(room: string, san: string, color: Color) {
 }
 
 const bannedUsers = new Map<string, Date>(); // \/
-const roomToChess = new Map<string, Chess>();// \/
-const userToRoomMap = new Map<string, string>();// \/
-const userToSocket = new Map<string, Socket>();// \/
-const userToTimeoutMap = new Map<string, number>();// \/
-const roomToRematchMap = new Map<string, number>();// \/
+const roomToChess = new Map<string, Chess>(); // \/
+const userToRoomMap = new Map<string, string>(); // \/
+const userToSocket = new Map<string, Socket>(); // \/
+const userToTimeoutMap = new Map<string, number>(); // \/
+const roomToRematchMap = new Map<string, number>(); // \/
 
-function moveListener(room: string, color: Color, san: string, socket: Socket, callback: Function) {
+function moveListener(
+  room: string,
+  color: Color,
+  san: string,
+  socket: Socket,
+  callback: Function,
+) {
   function ackknowledgementCallback(err: Error, response: string) {
     if (err) {
       console.log("no acknowledgement");
@@ -296,8 +363,8 @@ function moveListener(room: string, color: Color, san: string, socket: Socket, c
   console.log(`color: ${color}`); // FC
   console.log(`SAN : ${san}`); // FC
   console.log(`USER : ${socket.handshake.auth.username}`); // FC
-  console.log('-------------------------------------------------')
-  callback('ok');
+  console.log("-------------------------------------------------");
+  callback("ok");
   if (!registerMove(room, san, color)) return;
   socket
     .timeout(10000)
@@ -315,6 +382,10 @@ function makeRooms() {
       queue.dequeue();
       sockets.push(x);
       if (sockets.length === 2) {
+        if(sockets[0].handshake.auth.username === sockets[1].handshake.auth.username) {
+          // fix the memory leak
+          continue;
+        }
         const room: string =
           uid(20) +
           "?user1=" +
@@ -368,24 +439,18 @@ io.on("connection", (socket) => {
     if (prevTime) {
       const x = (currTime - prevTime) / 1000;
       if (x < 60) {
-        socket.emit(
-          "banned",
-          `you are banned for ${Math.ceil(
-            x / 60,
-          )} minutes for the attempt of tampering with servers`,
-        );
+        socket.emit("banned", 60 - x);
         console.log(
-          `${socket.handshake.auth.username} has been banned for ${Math.ceil(
-            x / 60,
-          )} minutes`,
+          `${socket.handshake.auth.username} has been banned for ${60 - x} seconds`,
         );
         return;
       } else {
         bannedUsers.delete(socket.handshake.auth.username);
+        socket.emit("banlifted");
       }
     }
   }
-  if(userToSocket.has(socket.handshake.auth.username)){
+  if (userToSocket.has(socket.handshake.auth.username)) {
     socket.disconnect();
     return;
   }
@@ -416,9 +481,9 @@ io.on("connection", (socket) => {
         socket.handshake.auth.username,
       );
       userToTimeoutMap.set(socket.handshake.auth.username, timed);
-    } else if(roomSet !== "" && chessis && chessis.isGameOver()){
+    } else if (roomSet !== "" && chessis && chessis.isGameOver()) {
       handleGameLeave(socket.handshake.auth.username);
-    }else {
+    } else {
       userToSocket.delete(socket.handshake.auth.username);
     }
   });
@@ -443,7 +508,7 @@ io.on("connection", (socket) => {
       let color: Color;
       if (users[0] === userName) {
         color = "w";
-        socket.on("move", (san: string, callback:Function) =>
+        socket.on("move", (san: string, callback: Function) =>
           moveListener(room, "w", san, socket, callback),
         );
       } else {
