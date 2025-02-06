@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `Game` MODIFY `PGN` LONGTEXT NOT NULL;
