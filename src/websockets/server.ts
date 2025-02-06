@@ -23,6 +23,38 @@ function initiateRematch(room: string) {
   }
 }
 
+function completePGNFormatter(
+  PGN: string,
+  players: string[],
+  result: string,
+  room: string,
+) {
+  let initStr: string = "";
+  const dateObj = new Date();
+  const month = dateObj.getUTCMonth() + 1; // months from 1-12
+  const pMonth = month.toString().padStart(2, "0");
+  const day = dateObj.getUTCDate();
+  const pDay = day.toString().padStart(2, "0");
+  const year = dateObj.getUTCFullYear();
+  const hours = String(dateObj.getUTCHours()).padStart(2, "0");
+  const minutes = String(dateObj.getUTCMinutes()).padStart(2, "0");
+  const seconds = String(dateObj.getUTCSeconds()).padStart(2, "0");
+  const dateString = year + "." + pMonth + "." + pDay;
+  const utcTimeString = `${hours}:${minutes}:${seconds}`;
+
+  initStr += `[Event "Casual online gameplay"]\n`;
+  initStr += `[Site "https://chessdom.vercel.app"]\n`;
+  initStr += `[White "${players[0]}"]\n`;
+  initStr += `[Black "${players[1]}"]\n`;
+  initStr += `[Result "${result}"]\n`;
+  initStr += `[GameId "${room}"]\n`;
+  initStr += `[UTCDate "${dateString}"]\n`;
+  initStr += `[UTCTime "${utcTimeString}"]\n`;
+  initStr += `[Variant "Standard"]\n\n`;
+  initStr += PGN;
+  return initStr;
+}
+
 function handleGameResignation(socket: Socket, user: string, playColor: Color) {
   const room = userToRoomMap.get(user);
   if (room) {
@@ -41,7 +73,8 @@ function handleGameResignation(socket: Socket, user: string, playColor: Color) {
       const players = getUsersFromRoom(room);
       // Save Game To Database
       console.log(PGN); // EXP
-      saveGame(players[1], players[0], room, PGN, resgString);
+      const finalPGN = completePGNFormatter(PGN, players, resgString, room);
+      saveGame(players[1], players[0], room, finalPGN, resgString);
     }
   }
 }
@@ -268,7 +301,8 @@ function registerMove(room: string, san: string, color: Color) {
         ? "0-1"
         : "1-0";
       const PGN = chessis.pgn() + ` ${resultStr}`;
-      saveGame(players[1], players[0], room, PGN, resultStr);
+      const finalPGN = completePGNFormatter(PGN, players, resultStr, room);
+      saveGame(players[1], players[0], room, finalPGN, resultStr);
     }
     return true;
   } catch (err) {
