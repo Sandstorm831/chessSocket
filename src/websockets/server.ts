@@ -41,7 +41,7 @@ function handleGameResignation(socket: Socket, user: string, playColor: Color) {
       const players = getUsersFromRoom(room);
       // Save Game To Database
       console.log(PGN); // EXP
-      saveGame(players[1], players[0], room, PGN, resgString)
+      saveGame(players[1], players[0], room, PGN, resgString);
     }
   }
 }
@@ -57,7 +57,7 @@ function handleRematch(user: string) {
         io.to(room).emit("rematchconfirmed");
       } else {
         console.log(
-          "rematch number is other than 1, and I don't know why It came here",
+          "rematch number is other than 1, and I don't know why It came here"
         );
       }
     } else {
@@ -149,7 +149,7 @@ function banTheUser(room: string, color: Color) {
       if (players[i] !== notoriousUser && socket) {
         console.log(
           "Testing If control is reaching the emit statement of opponentleftgame & room = " +
-            room,
+            room
         );
         socket.emit("opponentleftgame");
       } else if (players[i] === notoriousUser && socket) {
@@ -184,7 +184,7 @@ function beginReconciliation(socket: Socket, color: Color) {
       socket
         .timeout(10000)
         .emit("reconciliation", x, color, (err: Error, response: string) =>
-          acknowledgementCallback(err, response),
+          acknowledgementCallback(err, response)
         );
       return;
     } else {
@@ -233,7 +233,7 @@ function cleanUsersAndRoom(user: string) {
         if (players[i] !== user && socket) {
           console.log(
             "Testing If control is reaching the emit statement of opponentleftgame & room = " +
-              room,
+              room
           );
           socket.emit("opponentleftgame");
         }
@@ -262,8 +262,12 @@ function registerMove(room: string, san: string, color: Color) {
       const players = getUsersFromRoom(room);
       // save the game to the database
       const gameDraw = chessis.isDraw();
-      const resultStr: string = gameDraw ? '1/2-1/2' : chessis.turn() === 'w' ? '0-1' : "1-0";
-      saveGame(players[1], players[0], room,chessis.pgn(), resultStr);
+      const resultStr: string = gameDraw
+        ? "1/2-1/2"
+        : chessis.turn() === "w"
+        ? "0-1"
+        : "1-0";
+      saveGame(players[1], players[0], room, chessis.pgn(), resultStr);
     }
     return true;
   } catch (err) {
@@ -285,7 +289,7 @@ function moveListener(
   color: Color,
   san: string,
   socket: Socket,
-  callback: Function,
+  callback: Function
 ) {
   function ackknowledgementCallback(err: Error, response: string) {
     if (err) {
@@ -294,7 +298,7 @@ function moveListener(
         .timeout(10000)
         .to(room)
         .emit("move", san, (err: Error, response: string) =>
-          ackknowledgementCallback(err, response),
+          ackknowledgementCallback(err, response)
         );
       return;
     } else {
@@ -315,7 +319,7 @@ function moveListener(
     .timeout(10000)
     .to(room)
     .emit("move", san, (err: Error, response: string) =>
-      ackknowledgementCallback(err, response),
+      ackknowledgementCallback(err, response)
     );
 }
 
@@ -327,7 +331,10 @@ function makeRooms() {
       queue.dequeue();
       sockets.push(x);
       if (sockets.length === 2) {
-        if(sockets[0].handshake.auth.username === sockets[1].handshake.auth.username) {
+        if (
+          sockets[0].handshake.auth.username ===
+          sockets[1].handshake.auth.username
+        ) {
           // fix the memory leak
           continue;
         }
@@ -343,11 +350,11 @@ function makeRooms() {
         const socket1 = sockets[1];
         // user1 is assigned color white
         sockets[0].on("move", (san: string, callback: Function) =>
-          moveListener(room, "w", san, socket0, callback),
+          moveListener(room, "w", san, socket0, callback)
         );
         // user 2 is assigned color black
         sockets[1].on("move", (san: string, callback: Function) =>
-          moveListener(room, "b", san, socket1, callback),
+          moveListener(room, "b", san, socket1, callback)
         );
 
         socket0.emit("gamecolor", "w");
@@ -386,7 +393,9 @@ io.on("connection", (socket) => {
       if (x < 60) {
         socket.emit("banned", 60 - x);
         console.log(
-          `${socket.handshake.auth.username} has been banned for ${60 - x} seconds`,
+          `${socket.handshake.auth.username} has been banned for ${
+            60 - x
+          } seconds`
         );
         return;
       } else {
@@ -401,14 +410,14 @@ io.on("connection", (socket) => {
   }
   socket.on("disconnect", (reason) => {
     console.log(
-      `${socket.handshake.auth.username} is disconnected, reason : ${reason}`,
+      `${socket.handshake.auth.username} is disconnected, reason : ${reason}`
     );
     userToSocket.delete(socket.handshake.auth.username);
   });
 
   socket.on("disconnecting", (reason) => {
     console.log(
-      `${socket.handshake.auth.username} is going to diconnect, corresponding room is :`,
+      `${socket.handshake.auth.username} is going to diconnect, corresponding room is :`
     );
     console.log(socket.rooms);
     let roomSet = "";
@@ -423,7 +432,7 @@ io.on("connection", (socket) => {
           cleanUsersAndRoom(author);
         },
         3000,
-        socket.handshake.auth.username,
+        socket.handshake.auth.username
       );
       userToTimeoutMap.set(socket.handshake.auth.username, timed);
     } else if (roomSet !== "" && chessis && chessis.isGameOver()) {
@@ -437,7 +446,7 @@ io.on("connection", (socket) => {
   socket.on("newgame", () => handleNewGame(socket.handshake.auth.username));
   socket.on("gameleave", () => handleGameLeave(socket.handshake.auth.username));
   socket.on("resigned", (playColor: Color) =>
-    handleGameResignation(socket, socket.handshake.auth.username, playColor),
+    handleGameResignation(socket, socket.handshake.auth.username, playColor)
   );
 
   if (userToTimeoutMap.has(socket.handshake.auth.username)) {
@@ -454,12 +463,12 @@ io.on("connection", (socket) => {
       if (users[0] === userName) {
         color = "w";
         socket.on("move", (san: string, callback: Function) =>
-          moveListener(room, "w", san, socket, callback),
+          moveListener(room, "w", san, socket, callback)
         );
       } else {
         color = "b";
         socket.on("move", (san: string, callback: Function) =>
-          moveListener(room, "b", san, socket, callback),
+          moveListener(room, "b", san, socket, callback)
         );
       }
       userToTimeoutMap.delete(userName);
