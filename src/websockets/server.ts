@@ -4,6 +4,7 @@ import { Server, Socket } from "socket.io";
 import { Queue } from "../queue";
 import { uid } from "uid";
 import { Chess, Color, DEFAULT_POSITION } from "chess.js";
+import { saveGame } from "../DBQueries";
 
 const app = express();
 const server = createServer(app);
@@ -38,7 +39,9 @@ function handleGameResignation(socket: Socket, user: string, playColor: Color) {
         PGN += pgnString;
       }
       const players = getUsersFromRoom(room);
-      // Save PGN To Database
+      // Save Game To Database
+      console.log(PGN); // EXP
+      saveGame(players[1], players[0], room, PGN, resgString)
     }
   }
 }
@@ -123,67 +126,6 @@ function handleNewGame(user: string) {
     if (queue.length >= 2) makeRooms();
   }
 }
-
-// function handleUserBanning(notoriousUser: string, room: string) {
-//   roomToChess.delete(room);
-//   userToRoomMap.delete(notoriousUser);
-//   userToTimeoutMap.delete(notoriousUser);
-//   const notoriousSocket = userToSocket.get(notoriousUser);
-//   if (notoriousSocket) {
-//     notoriousSocket.emit(
-//       "banned",
-//       "you are banned for an hour for the attempt of tampering with servers",
-//     );
-//     notoriousSocket.removeAllListeners();
-//     notoriousSocket.disconnect();
-//   }
-//   userToSocket.delete(notoriousUser);
-// }
-
-// function handleNewGameBanned(user: string, room: string) {
-
-//   ///////////////
-//   if(user){
-//     const room = userToRoomMap.get(user);
-//     userToTimeoutMap.delete(user);
-//     if (room) {
-//       io.in(room).socketsLeave(room);
-//       roomToChess.delete(room);
-//       roomToRematchMap.delete(room);
-//       const players = getUsersFromRoom(room);
-//       for (let i = 0; i < players.length; i++) {
-//         userToRoomMap.delete(players[i]);
-//         userToTimeoutMap.delete(players[i]);
-//         const socket = userToSocket.get(players[i]);
-//         socket?.removeAllListeners("move");
-//         if (players[i] !== user && socket) {
-//           console.log('Testing If control is reaching the emit statement of opponentleftgame & room = ' + room)
-//           socket.emit('opponentleftgame');
-//         }
-//       }
-//       userToSocket.delete(user);
-//     }
-//     else {
-//       // just a safety net
-//       userToSocket.delete(user);
-//     }
-//   }
-//   ///////////////
-
-//   userToRoomMap.delete(user);
-//   roomToChess.delete(room);
-//   const evenSocket = userToSocket.get(user);
-//   if (evenSocket) {
-//     evenSocket.removeAllListeners("move");
-//     evenSocket.leave(room);
-//     evenSocket.emit(
-//       "otherplayerleft",
-//       "opponent left unexpectedly, transferring to a new game",
-//     );
-//     queue.enqueue(evenSocket);
-//     if (queue.length >= 2) makeRooms();
-//   }
-// }
 
 function banTheUser(room: string, color: Color) {
   const players = getUsersFromRoom(room);
@@ -319,6 +261,9 @@ function registerMove(room: string, san: string, color: Color) {
     if (chessis.isGameOver()) {
       const players = getUsersFromRoom(room);
       // save the game to the database
+      const gameDraw = chessis.isDraw();
+      const resultStr: string = gameDraw ? '1/2-1/2' : chessis.turn() === 'w' ? '0-1' : "1-0";
+      saveGame(players[1], players[0], room,chessis.pgn(), resultStr);
     }
     return true;
   } catch (err) {
