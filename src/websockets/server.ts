@@ -267,7 +267,8 @@ function registerMove(room: string, san: string, color: Color) {
         : chessis.turn() === "w"
         ? "0-1"
         : "1-0";
-      saveGame(players[1], players[0], room, chessis.pgn(), resultStr);
+      const PGN = chessis.pgn() + ` ${resultStr}`;
+      saveGame(players[1], players[0], room, PGN, resultStr);
     }
     return true;
   } catch (err) {
