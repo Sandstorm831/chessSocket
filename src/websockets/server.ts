@@ -90,7 +90,7 @@ function handleRematch(user: string) {
         io.to(room).emit("rematchconfirmed");
       } else {
         console.log(
-          "rematch number is other than 1, and I don't know why It came here"
+          "rematch number is other than 1, and I don't know why It came here",
         );
       }
     } else {
@@ -176,13 +176,12 @@ function banTheUser(room: string, color: Color) {
     for (let i = 0; i < players.length; i++) {
       userToTimeoutMap.delete(players[i]);
       userToRoomMap.delete(players[i]);
-      userToTimeoutMap.delete(players[i]);
       const socket = userToSocket.get(players[i]);
       socket?.removeAllListeners("move");
       if (players[i] !== notoriousUser && socket) {
         console.log(
           "Testing If control is reaching the emit statement of opponentleftgame & room = " +
-            room
+            room,
         );
         socket.emit("opponentleftgame");
       } else if (players[i] === notoriousUser && socket) {
@@ -217,7 +216,7 @@ function beginReconciliation(socket: Socket, color: Color) {
       socket
         .timeout(10000)
         .emit("reconciliation", x, color, (err: Error, response: string) =>
-          acknowledgementCallback(err, response)
+          acknowledgementCallback(err, response),
         );
       return;
     } else {
@@ -266,7 +265,7 @@ function cleanUsersAndRoom(user: string) {
         if (players[i] !== user && socket) {
           console.log(
             "Testing If control is reaching the emit statement of opponentleftgame & room = " +
-              room
+              room,
           );
           socket.emit("opponentleftgame");
         }
@@ -285,7 +284,7 @@ function registerMove(room: string, san: string, color: Color) {
     const chessis = roomToChess.get(room);
     if (chessis === undefined) {
       console.log("chess is not defined at the server");
-      return;
+      return false;
     }
     if (color !== chessis.turn()) {
       throw new Error();
@@ -298,8 +297,8 @@ function registerMove(room: string, san: string, color: Color) {
       const resultStr: string = gameDraw
         ? "1/2-1/2"
         : chessis.turn() === "w"
-        ? "0-1"
-        : "1-0";
+          ? "0-1"
+          : "1-0";
       const PGN = chessis.pgn() + ` ${resultStr}`;
       const finalPGN = completePGNFormatter(PGN, players, resultStr, room);
       saveGame(players[1], players[0], room, finalPGN, resultStr);
@@ -324,7 +323,7 @@ function moveListener(
   color: Color,
   san: string,
   socket: Socket,
-  callback: Function
+  callback: Function,
 ) {
   function ackknowledgementCallback(err: Error, response: string) {
     if (err) {
@@ -333,7 +332,7 @@ function moveListener(
         .timeout(10000)
         .to(room)
         .emit("move", san, (err: Error, response: string) =>
-          ackknowledgementCallback(err, response)
+          ackknowledgementCallback(err, response),
         );
       return;
     } else {
@@ -354,7 +353,7 @@ function moveListener(
     .timeout(10000)
     .to(room)
     .emit("move", san, (err: Error, response: string) =>
-      ackknowledgementCallback(err, response)
+      ackknowledgementCallback(err, response),
     );
 }
 
@@ -385,11 +384,11 @@ function makeRooms() {
         const socket1 = sockets[1];
         // user1 is assigned color white
         sockets[0].on("move", (san: string, callback: Function) =>
-          moveListener(room, "w", san, socket0, callback)
+          moveListener(room, "w", san, socket0, callback),
         );
         // user 2 is assigned color black
         sockets[1].on("move", (san: string, callback: Function) =>
-          moveListener(room, "b", san, socket1, callback)
+          moveListener(room, "b", san, socket1, callback),
         );
 
         socket0.emit("gamecolor", "w");
@@ -430,7 +429,7 @@ io.on("connection", (socket) => {
         console.log(
           `${socket.handshake.auth.username} has been banned for ${
             60 - x
-          } seconds`
+          } seconds`,
         );
         return;
       } else {
@@ -439,20 +438,22 @@ io.on("connection", (socket) => {
       }
     }
   }
+
   if (userToSocket.has(socket.handshake.auth.username)) {
     socket.disconnect();
     return;
   }
+
   socket.on("disconnect", (reason) => {
     console.log(
-      `${socket.handshake.auth.username} is disconnected, reason : ${reason}`
+      `${socket.handshake.auth.username} is disconnected, reason : ${reason}`,
     );
     userToSocket.delete(socket.handshake.auth.username);
   });
 
   socket.on("disconnecting", (reason) => {
     console.log(
-      `${socket.handshake.auth.username} is going to diconnect, corresponding room is :`
+      `${socket.handshake.auth.username} is going to diconnect, corresponding room is :`,
     );
     console.log(socket.rooms);
     let roomSet = "";
@@ -467,7 +468,7 @@ io.on("connection", (socket) => {
           cleanUsersAndRoom(author);
         },
         3000,
-        socket.handshake.auth.username
+        socket.handshake.auth.username,
       );
       userToTimeoutMap.set(socket.handshake.auth.username, timed);
     } else if (roomSet !== "" && chessis && chessis.isGameOver()) {
@@ -478,10 +479,13 @@ io.on("connection", (socket) => {
   });
 
   socket.on("rematch", () => handleRematch(socket.handshake.auth.username));
+
   socket.on("newgame", () => handleNewGame(socket.handshake.auth.username));
+
   socket.on("gameleave", () => handleGameLeave(socket.handshake.auth.username));
+
   socket.on("resigned", (playColor: Color) =>
-    handleGameResignation(socket, socket.handshake.auth.username, playColor)
+    handleGameResignation(socket, socket.handshake.auth.username, playColor),
   );
 
   if (userToTimeoutMap.has(socket.handshake.auth.username)) {
@@ -498,12 +502,12 @@ io.on("connection", (socket) => {
       if (users[0] === userName) {
         color = "w";
         socket.on("move", (san: string, callback: Function) =>
-          moveListener(room, "w", san, socket, callback)
+          moveListener(room, "w", san, socket, callback),
         );
       } else {
         color = "b";
         socket.on("move", (san: string, callback: Function) =>
-          moveListener(room, "b", san, socket, callback)
+          moveListener(room, "b", san, socket, callback),
         );
       }
       userToTimeoutMap.delete(userName);
@@ -512,6 +516,7 @@ io.on("connection", (socket) => {
       return;
     }
   }
+
   userToSocket.set(socket.handshake.auth.username, socket);
 
   queue.enqueue(socket);
