@@ -368,7 +368,7 @@ function makeRooms() {
           sockets[0].handshake.auth.username ===
           sockets[1].handshake.auth.username
         ) {
-          // fix the memory leak
+          queue.enqueue(sockets[0]);
           continue;
         }
         const room: string =
