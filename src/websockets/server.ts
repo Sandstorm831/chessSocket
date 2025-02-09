@@ -151,10 +151,9 @@ function handleNewGame(user: string) {
   } else {
     // I am assuming that code flow will reach here when other player already
     // clicked new game, thus userToRoom  entry doesn't exist;
-    const socket = userToSocket.get(user);
-    if (socket) {
-      socket.removeAllListeners("move");
-      queue.enqueue(socket);
+    if (tempSocket) {
+      tempSocket.removeAllListeners("move");
+      queue.enqueue(tempSocket);
     }
     if (queue.length >= 2) makeRooms();
   }
