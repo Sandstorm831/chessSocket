@@ -368,7 +368,8 @@ function makeRooms() {
           sockets[0].handshake.auth.username ===
           sockets[1].handshake.auth.username
         ) {
-          queue.enqueue(sockets[0]);
+          const UTS = userToSocket.get(sockets[0].handshake.auth.username);
+          if (UTS) queue.enqueue(UTS);
           continue;
         }
         const room: string =
@@ -439,6 +440,7 @@ io.on("connection", (socket) => {
   }
 
   if (userToSocket.has(socket.handshake.auth.username)) {
+    socket.emit("sameuser");
     socket.disconnect();
     return;
   }
