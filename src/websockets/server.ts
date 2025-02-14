@@ -391,8 +391,8 @@ function makeRooms() {
           moveListener(room, "b", san, socket1, callback),
         );
 
-        socket0.emit("gamecolor", "w");
-        socket1.emit("gamecolor", "b");
+        socket0.emit("gamecolor", "w", socket1.handshake.auth.username);
+        socket1.emit("gamecolor", "b", socket0.handshake.auth.username);
         userToRoomMap.set(sockets[0].handshake.auth.username, room);
         userToRoomMap.set(sockets[1].handshake.auth.username, room);
         roomToChess.set(room, new Chess());
