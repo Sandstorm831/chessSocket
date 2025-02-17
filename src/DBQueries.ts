@@ -8,7 +8,7 @@ export async function saveGame(
   PGN: string,
   result: string
 ) {
-  const gameObj = await prisma.game
+  await prisma.game
     .create({
       data: {
         RoomID,
@@ -22,6 +22,7 @@ export async function saveGame(
       await prisma.$disconnect();
     })
     .catch(async (e) => {
+      console.log("Some error occured while saving game");
       console.log(e);
       await prisma.$disconnect();
       process.exit(1);
