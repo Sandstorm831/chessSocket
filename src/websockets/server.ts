@@ -186,9 +186,6 @@ function banTheUser(room: string, color: Color) {
     // Don't know what to do if room is not there
   }
   ///////////////
-
-  // handleUserBanning(notoriousUser, room);
-  // handleNewGameBanned(evenUser, room);
 }
 
 function beginReconciliation(socket: Socket, color: Color) {
@@ -301,12 +298,12 @@ function registerMove(room: string, san: string, color: Color) {
   }
 }
 
-const bannedUsers = new Map<string, Date>(); // \/
-const roomToChess = new Map<string, Chess>(); // \/
-const userToRoomMap = new Map<string, string>(); // \/
-const userToSocket = new Map<string, Socket>(); // \/
-const userToTimeoutMap = new Map<string, number>(); // \/
-const roomToRematchMap = new Map<string, number>(); // \/
+const bannedUsers = new Map<string, Date>();
+const roomToChess = new Map<string, Chess>();
+const userToRoomMap = new Map<string, string>();
+const userToSocket = new Map<string, Socket>();
+const userToTimeoutMap = new Map<string, number>();
+const roomToRematchMap = new Map<string, number>();
 
 function moveListener(
   room: string,
@@ -398,8 +395,6 @@ function makeRooms() {
   }
 }
 
-// socket.handshake.auth.username;
-
 io.on("connection", (socket) => {
   console.log(`${socket.handshake.auth.username} has jointed`);
 
@@ -415,11 +410,11 @@ io.on("connection", (socket) => {
     let prevTime = bannedUsers.get(socket.handshake.auth.username)?.getTime();
     if (prevTime) {
       const x = (currTime - prevTime) / 1000;
-      if (x < 60) {
-        socket.emit("banned", 60 - x);
+      if (x < 900) {
+        socket.emit("banned", 900 - x);
         console.log(
           `${socket.handshake.auth.username} has been still banned for ${
-            60 - x
+            900 - x
           } seconds`,
         );
         return;
