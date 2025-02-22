@@ -450,7 +450,7 @@ io.on("connection", (socket) => {
         (author: string) => {
           cleanUsersAndRoom(author);
         },
-        3000,
+        10000,
         socket.handshake.auth.username,
       );
       userToTimeoutMap.set(socket.handshake.auth.username, timed);
