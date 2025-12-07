@@ -77,13 +77,19 @@ Once you finish installation Node.js, follow the commands to setup the project l
    npx prisma generate
    ```
 
-7. build the project
+7. Apply the migrations to the DB.
+   ```sh
+   npx prisma migrate deploy
+   ```
+
+
+8. build the project
 
    ```sh
    npm run build
    ```
 
-8. Start the server
+9. Start the server
    ```sh
     npm run start
    ```
