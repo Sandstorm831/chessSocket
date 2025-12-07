@@ -11,7 +11,6 @@ const server = createServer(app);
 const io = new Server(server, {
   cors: {
     origin: [
-      "https://chessdom.vercel.app",
       "http://localhost:3000",
       "https://chessdom.rgdev.xyz",
     ],
